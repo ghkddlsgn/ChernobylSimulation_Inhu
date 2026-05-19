@@ -32,14 +32,14 @@ class C:
 
     WATER           = (181, 213, 219)
     WATER_OUTLINE   = (130, 170, 180)
-    GRAPHITE        = (72, 24, 92)     # dark purple
-    BORON           = (76, 187, 23)    # green
-    ROD_CASING      = (72, 24, 92)     # same purple as graphite
+    GRAPHITE        = (72, 24, 92)
+    BORON           = (76, 187, 23)
+    ROD_CASING      = (72, 24, 92)
 
-    FUEL_BG         = (195, 215, 222)  # slightly different blue than WATER
-    U_REACTIVE      = (66, 130, 230)   # blue dot
-    U_NONREACTIVE   = (165, 165, 170)  # gray dot
-    XENON           = (35, 35, 40)     # black dot
+    FUEL_BG         = (195, 215, 222)
+    U_REACTIVE      = (66, 130, 230)
+    U_NONREACTIVE   = (165, 165, 170)
+    XENON           = (35, 35, 40)
 
 
 # Material constants -- neutrons will query against these later.
