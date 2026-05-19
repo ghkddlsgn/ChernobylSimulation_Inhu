@@ -32,16 +32,17 @@ class C:
 
     WATER           = (181, 213, 219)
     WATER_OUTLINE   = (130, 170, 180)
-    GRAPHITE        = (72, 24, 92)
-    BORON           = (76, 187, 23)
-    ROD_CASING      = (72, 24, 92)
+    GRAPHITE        = (72, 24, 92)     # dark purple
+    BORON           = (76, 187, 23)    # green
+    ROD_CASING      = (72, 24, 92)     # same purple as graphite
 
-    FUEL_BG         = (195, 215, 222)
-    U_REACTIVE      = (66, 130, 230)
-    U_NONREACTIVE   = (165, 165, 170)
-    XENON           = (35, 35, 40)
+    FUEL_BG         = (195, 215, 222)  # slightly different blue than WATER
+    U_REACTIVE      = (66, 130, 230)   # blue dot
+    U_NONREACTIVE   = (165, 165, 170)  # gray dot
+    XENON           = (35, 35, 40)     # black dot
 
 
+# Material constants -- neutrons will query against these later.
 MATERIAL_WATER    = "water"
 MATERIAL_GRAPHITE = "graphite"
 MATERIAL_BORON    = "boron"
@@ -70,12 +71,14 @@ class ControlRod:
     BORON_LEN    = 290
     CASING_LEN   = 220
 
-    def __init__(self, channel_x, channel_w, body_top_y, body_bottom_y):
+    def __init__(self, channel_x, channel_w, body_top_y, body_bottom_y,
+                 visible_top_y):
         self.channel_x = channel_x
         self.channel_w = channel_w
-        self.body_top_y = body_top_y
-        self.body_bottom_y = body_bottom_y
-        self.tip_y = body_top_y
+        self.body_top_y = body_top_y          # top of the reactor body
+        self.body_bottom_y = body_bottom_y    # bottom-most y the tip can reach
+        self.visible_top_y = visible_top_y    # rod is not drawn above this y
+        self.tip_y = body_top_y               # placeholder, set via set_normalized_position
         self.set_normalized_position(0.5)
 
     @property
@@ -86,10 +89,11 @@ class ControlRod:
         """0.0 = fully withdrawn ("prohibited", tip just above body).
         1.0 = fully inserted ("shutdown", tip at the bottom of the body)."""
         p = max(0.0, min(1.0, p))
-        y_high = self.body_top_y - 5
-        y_low  = self.body_bottom_y
+        y_high = self.body_top_y - 5            # tip just above the body
+        y_low  = self.body_bottom_y             # tip at bottom of body
         self.tip_y = int(y_high + p * (y_low - y_high))
 
+    # ---- material queries ------------------------------------------------
     def section_at_y(self, y):
         """Return which rod section sits at world-y `y`, or None if no rod."""
         graphite_top = self.tip_y - self.GRAPHITE_LEN
@@ -103,6 +107,7 @@ class ControlRod:
         if y > boron_top:    return "boron"
         return "casing"
 
+    # ---- drawing ---------------------------------------------------------
     def draw(self, surf):
         cx     = self.channel_x + self.channel_w // 2
         rod_w  = self.channel_w - 4
@@ -113,23 +118,25 @@ class ControlRod:
         boron_top    = gap_top - self.BORON_LEN
         casing_top   = boron_top - self.CASING_LEN
 
-        if casing_top < boron_top:
+        clip_y = self.visible_top_y
+
+        def draw_section(color, top, bottom, width):
+            """Draw a rod section between [top, bottom], clipping at clip_y."""
+            top = max(top, clip_y)
+            if bottom <= top:
+                return
             pygame.draw.rect(
-                surf, C.ROD_CASING,
-                (cx - thin_w // 2, casing_top, thin_w, boron_top - casing_top),
+                surf, color, (cx - width // 2, top, width, bottom - top),
             )
-        pygame.draw.rect(
-            surf, C.BORON,
-            (cx - rod_w // 2, boron_top, rod_w, self.BORON_LEN),
-        )
-        pygame.draw.rect(
-            surf, C.ROD_CASING,
-            (cx - thin_w // 2, gap_top, thin_w, self.GAP_LEN),
-        )
-        pygame.draw.rect(
-            surf, C.GRAPHITE,
-            (cx - rod_w // 2, graphite_top, rod_w, self.GRAPHITE_LEN),
-        )
+
+        # Top casing (thin stem above the boron)
+        draw_section(C.ROD_CASING, casing_top, boron_top, thin_w)
+        # Boron absorber
+        draw_section(C.BORON, boron_top, boron_top + self.BORON_LEN, rod_w)
+        # Gap (thin connector)
+        draw_section(C.ROD_CASING, gap_top, gap_top + self.GAP_LEN, thin_w)
+        # Graphite displacer (the tip)
+        draw_section(C.GRAPHITE, graphite_top, graphite_top + self.GRAPHITE_LEN, rod_w)
 
 
 # ---------------------------------------------------------------------------
@@ -142,11 +149,11 @@ class Reactor:
         (num_rods rod channels, num_rods + 1 graphite columns)
 
     Vertically, top to bottom:
+        top padding (empty, keeps rods off the title bar)
         rod-extension area  (rods stick up out of the body)
         water (top)
         core: graphite block | fuel zone | graphite block
         water (bottom)
-        cooling water channel (extends to the right past the body)
     """
 
     def __init__(self, x, y, w, h, num_rods=10):
@@ -154,26 +161,33 @@ class Reactor:
         self.num_rods = num_rods
         self.num_graphite_cols = num_rods + 1
 
-        self.rod_extension_h    = 110
+        # ---- vertical layout (heights) ----------------------------------
+        self.rod_extension_h    = 170   # area where rod casings are visible above the body
         self.water_top_h        = 50
         self.graphite_top_h     = 75
         self.fuel_h             = 230
         self.graphite_bottom_h  = 75
         self.water_bottom_h     = 40
-        self.cooling_channel_h  = 45
 
-        self.water_top_y    = y + self.rod_extension_h
+        # ---- vertical layout (y coordinates) -----------------------------
+        # Push the whole reactor down by this offset to leave clean space at
+        # the top of the panel (so rods don't run into the title bar).
+        self.top_padding    = 80
+        self.water_top_y    = y + self.top_padding + self.rod_extension_h
         self.core_top_y     = self.water_top_y + self.water_top_h
         self.fuel_top_y     = self.core_top_y + self.graphite_top_h
         self.fuel_bottom_y  = self.fuel_top_y + self.fuel_h
         self.core_bottom_y  = self.fuel_bottom_y + self.graphite_bottom_h
         self.water_bot_y    = self.core_bottom_y
-        self.cooling_top_y  = self.water_bot_y + self.water_bottom_h
-        self.cooling_bot_y  = self.cooling_top_y + self.cooling_channel_h
 
         self.body_top_y     = self.water_top_y
         self.body_bottom_y  = self.water_bot_y + self.water_bottom_h
 
+        # Rod casings only render below this y -- ensures they disappear
+        # well before reaching the panel edge.
+        self.rod_visible_top_y = y + self.top_padding
+
+        # ---- horizontal layout -----------------------------------------
         self.rod_channel_w = 16
         side_margin = 25
         usable = w - 2 * side_margin
@@ -184,6 +198,7 @@ class Reactor:
         self.body_left  = self.cols_x0 - 8
         self.body_right = self.cols_x0 + total_w + 8
 
+        # ---- control rods ------------------------------------------------
         self.rods = []
         for i in range(num_rods):
             cx = self.cols_x0 + (i + 1) * self.graphite_w + i * self.rod_channel_w
@@ -192,20 +207,22 @@ class Reactor:
                 channel_w=self.rod_channel_w,
                 body_top_y=self.body_top_y,
                 body_bottom_y=self.body_bottom_y,
+                visible_top_y=self.rod_visible_top_y,
             )
             self.rods.append(rod)
-
+        # Varied initial positions to mirror image 1's I/II/III/IV layout.
         initial_positions = [0.05, 0.30, 0.50, 0.95, 0.20, 0.55, 0.45, 0.85, 0.60, 0.10]
         for r, p in zip(self.rods, initial_positions):
             r.set_normalized_position(p)
 
+        # ---- fuel dot grid ----------------------------------------------
         self.dot_spacing = 9
         self.dot_radius  = 2
         self._build_fuel_grid()
 
     def _build_fuel_grid(self):
         rng = random.Random(42)
-        self.fuel = {}
+        self.fuel = {}  # (col_index, row, col) -> 'reactive'|'nonreactive'|'xenon'
         n_cols = max(1, (self.graphite_w - 4) // self.dot_spacing)
         n_rows = max(1, (self.fuel_h - 4) // self.dot_spacing)
         self._n_dot_cols = n_cols
@@ -222,21 +239,20 @@ class Reactor:
                         t = "xenon"
                     self.fuel[(ci, r, c)] = t
 
+    # ---- material lookup (the API neutrons will use) --------------------
     def material_at(self, px, py):
         """Return the material at world coordinates (px, py)."""
-        if (py < self.body_top_y or py > self.cooling_bot_y
-                or px < self.body_left - 10 or px > self.body_right + 10):
-            if py >= self.cooling_top_y and py <= self.cooling_bot_y:
-                return MATERIAL_WATER
+        # Outside the reactor body
+        if (py < self.body_top_y or py > self.body_bottom_y
+                or px < self.body_left or px > self.body_right):
             return MATERIAL_AIR
 
-        if py >= self.cooling_top_y:
-            return MATERIAL_WATER
-
+        # Above-core or below-core water region: maybe a rod is here
         if py < self.core_top_y or py >= self.core_bottom_y:
             mat = self._rod_material_at(px, py)
             return mat if mat else MATERIAL_WATER
 
+        # Inside the core -- pick column
         local = px - self.cols_x0
         col_w = self.graphite_w + self.rod_channel_w
         if local < 0 or local >= self.num_graphite_cols * col_w + self.graphite_w:
@@ -244,10 +260,11 @@ class Reactor:
         comp_idx = int(local // col_w)
         within = local - comp_idx * col_w
         if within < self.graphite_w:
+            # Graphite column
             if py < self.fuel_top_y or py >= self.fuel_bottom_y:
                 return MATERIAL_GRAPHITE
             return MATERIAL_FUEL
-        
+        # Rod channel: rod or water
         mat = self._rod_material_at(px, py)
         return mat if mat else MATERIAL_WATER
 
@@ -260,7 +277,7 @@ class Reactor:
         comp_idx = int(local // col_w)
         within = local - comp_idx * col_w
         if within < self.graphite_w:
-            return None
+            return None  # graphite column, no rod here
         rod_idx = comp_idx
         if rod_idx < 0 or rod_idx >= len(self.rods):
             return None
@@ -269,36 +286,36 @@ class Reactor:
         if section == "boron":    return MATERIAL_BORON
         return None
 
+    # ---- drawing --------------------------------------------------------
     def draw(self, surf, font_small):
+        # Reactor body (water fills it everywhere, then we overlay solids)
         body_rect = pygame.Rect(
             self.body_left, self.body_top_y,
             self.body_right - self.body_left,
             self.body_bottom_y - self.body_top_y,
         )
         pygame.draw.rect(surf, C.WATER, body_rect)
-
-        cool_rect = pygame.Rect(
-            self.body_left, self.cooling_top_y,
-            (self.x + self.w - 5) - self.body_left, self.cooling_channel_h,
-        )
-        pygame.draw.rect(surf, C.WATER, cool_rect)
-        pygame.draw.rect(surf, C.WATER_OUTLINE, cool_rect, 1)
         pygame.draw.rect(surf, C.WATER_OUTLINE, body_rect, 1)
 
+        # Graphite columns + fuel zone with dots
         for ci in range(self.num_graphite_cols):
             bx = self.cols_x0 + ci * (self.graphite_w + self.rod_channel_w)
+            # Top graphite block
             pygame.draw.rect(
                 surf, C.GRAPHITE,
                 (bx, self.core_top_y, self.graphite_w, self.graphite_top_h),
             )
+            # Bottom graphite block
             pygame.draw.rect(
                 surf, C.GRAPHITE,
                 (bx, self.fuel_bottom_y, self.graphite_w, self.graphite_bottom_h),
             )
+            # Fuel zone background
             pygame.draw.rect(
                 surf, C.FUEL_BG,
                 (bx, self.fuel_top_y, self.graphite_w, self.fuel_h),
             )
+            # Dots
             n_c, n_r = self._n_dot_cols, self._n_dot_rows
             x_off = (self.graphite_w - n_c * self.dot_spacing) // 2
             y_off = (self.fuel_h - n_r * self.dot_spacing) // 2
@@ -314,15 +331,9 @@ class Reactor:
                     else:
                         pygame.draw.circle(surf, C.XENON, (dx, dy), self.dot_radius)
 
+        # Control rods on top of everything
         for rod in self.rods:
             rod.draw(surf)
-
-        for i, rod in enumerate(self.rods):
-            label = font_small.render(str(i + 1), True, C.TEXT)
-            rect = label.get_rect(
-                center=(rod.channel_x + rod.channel_w // 2, self.cooling_bot_y + 14)
-            )
-            surf.blit(label, rect)
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +349,7 @@ class App:
         self.font       = pygame.font.SysFont("Arial", 15)
         self.font_small = pygame.font.SysFont("Arial", 13)
 
+        # Layout: reactor on the left, plots top-right, controls bottom-right
         m = 15
         self.reactor_panel = pygame.Rect(m, m, 920, WINDOW_HEIGHT - 2 * m)
         right_x = self.reactor_panel.right + m
@@ -349,6 +361,7 @@ class App:
             right_w, WINDOW_HEIGHT - 2 * m - plots_h - m,
         )
 
+        # Reactor sits inside its panel with some padding for the title bar.
         rx = self.reactor_panel.x + 10
         ry = self.reactor_panel.y + 45
         rw = self.reactor_panel.w - 20
