@@ -172,7 +172,7 @@ class Reactor:
         # ---- vertical layout (y coordinates) -----------------------------
         # Push the whole reactor down by this offset to leave clean space at
         # the top of the panel (so rods don't run into the title bar).
-        self.top_padding    = 80
+        self.top_padding    = 10
         self.water_top_y    = y + self.top_padding + self.rod_extension_h
         self.core_top_y     = self.water_top_y + self.water_top_h
         self.fuel_top_y     = self.core_top_y + self.graphite_top_h
