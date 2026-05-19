@@ -19,7 +19,6 @@ class ControlRod:
     of the graphite displacer). Sections grow upward from there.
     """
 
-    # Rod section lengths (in pixels)
     GRAPHITE_LEN = 75
     GAP_LEN = 18
     BORON_LEN = 290
@@ -56,8 +55,8 @@ class ControlRod:
             p: Normalized position from 0.0 (fully withdrawn) to 1.0 (fully inserted).
         """
         p = max(0.0, min(1.0, p))
-        y_high = self.body_top_y - 5  # tip just above the body
-        y_low = self.body_bottom_y    # tip at bottom of body
+        y_high = self.body_top_y - 5
+        y_low = self.body_bottom_y
         self.tip_y = int(y_high + p * (y_low - y_high))
 
     def section_at_y(self, y):
@@ -103,7 +102,6 @@ class ControlRod:
                 surf, color, (cx - width // 2, top, width, bottom - top),
             )
 
-        # Draw rod sections from bottom to top
         draw_section(ColorPalette.ROD_CASING, casing_top, boron_top, thin_w)
         draw_section(ColorPalette.BORON, boron_top, boron_top + self.BORON_LEN, rod_w)
         draw_section(ColorPalette.ROD_CASING, gap_top, gap_top + self.GAP_LEN, thin_w)

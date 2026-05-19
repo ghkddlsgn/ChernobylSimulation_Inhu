@@ -21,12 +21,10 @@ class App:
         pygame.display.set_caption("RBMK Reactor Simulation - Prototype")
         self.clock = pygame.time.Clock()
 
-        # Setup fonts
         self.font_title = pygame.font.SysFont("Arial", 20, bold=True)
         self.font = pygame.font.SysFont("Arial", 15)
         self.font_small = pygame.font.SysFont("Arial", 13)
 
-        # Setup layout
         self._setup_layout()
 
         self.running = True
@@ -35,7 +33,6 @@ class App:
         """Configure panel layout and reactor."""
         m = 15
 
-        # Reactor panel (left side)
         self.reactor_panel = UIPanel(
             pygame.Rect(m, m, 920, WINDOW_HEIGHT - 2 * m),
             "RBMK Reactor Core",
@@ -43,12 +40,10 @@ class App:
             self.font,
         )
 
-        # Right side panels
         right_x = self.reactor_panel.rect.right + m
         right_w = WINDOW_WIDTH - right_x - m
         plots_h = 480
 
-        # Plots panel (top-right)
         self.plots_panel = UIPanel(
             pygame.Rect(right_x, m, right_w, plots_h),
             "Plots",
@@ -56,7 +51,6 @@ class App:
             self.font,
         )
 
-        # Control panel (bottom-right)
         self.ctrl_panel = UIPanel(
             pygame.Rect(
                 right_x,
@@ -69,7 +63,6 @@ class App:
             self.font,
         )
 
-        # Create reactor inside its panel
         rx = self.reactor_panel.rect.x + 10
         ry = self.reactor_panel.rect.y + 45
         rw = self.reactor_panel.rect.w - 20
@@ -89,12 +82,10 @@ class App:
         """Draw the entire scene."""
         self.screen.fill(ColorPalette.APP_BG)
 
-        # Draw panels
         self.reactor_panel.draw(self.screen, show_placeholder=False)
         self.plots_panel.draw(self.screen, show_placeholder=True)
         self.ctrl_panel.draw(self.screen, show_placeholder=True)
 
-        # Draw reactor
         self.reactor.draw(self.screen, self.font_small)
 
     def run(self):

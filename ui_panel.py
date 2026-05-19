@@ -30,16 +30,12 @@ class UIPanel:
             surf: Pygame surface to draw on.
             show_placeholder: If True, show a placeholder message.
         """
-        # Background
         pygame.draw.rect(surf, ColorPalette.PANEL_BG, self.rect, border_radius=10)
-        # Border
         pygame.draw.rect(surf, ColorPalette.PANEL_BORDER, self.rect, width=1, border_radius=10)
 
-        # Title
         title_surf = self.font_title.render(self.title, True, ColorPalette.TEXT)
         surf.blit(title_surf, (self.rect.x + 14, self.rect.y + 10))
 
-        # Divider line
         pygame.draw.line(
             surf,
             ColorPalette.PANEL_BORDER,
@@ -47,7 +43,6 @@ class UIPanel:
             (self.rect.right - 12, self.rect.y + 38),
         )
 
-        # Placeholder text if needed
         if show_placeholder:
             text = self.font_regular.render("(placeholder)", True, ColorPalette.MUTED)
             text_rect = text.get_rect(center=self.rect.center)

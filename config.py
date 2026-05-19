@@ -2,12 +2,10 @@
 Configuration and constants for the RBMK Reactor Simulation.
 """
 
-# Window configuration
 WINDOW_WIDTH = 1400
 WINDOW_HEIGHT = 900
 FPS = 60
 
-# Material constants -- neutrons will query against these
 MATERIAL_WATER = "water"
 MATERIAL_GRAPHITE = "graphite"
 MATERIAL_BORON = "boron"

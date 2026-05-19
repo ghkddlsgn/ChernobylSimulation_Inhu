@@ -94,7 +94,6 @@ class Reactor:
             )
             self.rods.append(rod)
 
-        # Varied initial positions to mirror different control rod groups
         initial_positions = [0.05, 0.30, 0.50, 0.95, 0.20, 0.55, 0.45, 0.85, 0.60, 0.10]
         for r, p in zip(self.rods, initial_positions):
             r.set_normalized_position(p)
@@ -102,7 +101,7 @@ class Reactor:
     def _build_fuel_grid(self):
         """Generate the fuel dot grid with random distribution."""
         rng = random.Random(42)
-        self.fuel = {}  # (col_index, row, col) -> 'reactive'|'nonreactive'|'xenon'
+        self.fuel = {}
         n_cols = max(1, (self.graphite_w - 4) // self.dot_spacing)
         n_rows = max(1, (self.fuel_h - 4) // self.dot_spacing)
         self._n_dot_cols = n_cols
@@ -120,11 +119,9 @@ class Reactor:
                         t = "xenon"
                     self.fuel[(ci, r, c)] = t
 
-    # Fuel dot parameters
     dot_spacing = 9
     dot_radius = 2
 
-    # ---- Material Lookup API (for neutrons) --------------------------------
     def material_at(self, px, py):
         """Return the material at world coordinates (px, py).
 
@@ -137,17 +134,14 @@ class Reactor:
         Returns:
             One of the MATERIAL_* constants.
         """
-        # Outside the reactor body
         if (py < self.body_top_y or py > self.body_bottom_y
                 or px < self.body_left or px > self.body_right):
             return MATERIAL_AIR
 
-        # Above-core or below-core water region: maybe a rod is here
         if py < self.core_top_y or py >= self.core_bottom_y:
             mat = self._rod_material_at(px, py)
             return mat if mat else MATERIAL_WATER
 
-        # Inside the core -- pick column
         local = px - self.cols_x0
         col_w = self.graphite_w + self.rod_channel_w
         if local < 0 or local >= self.num_graphite_cols * col_w + self.graphite_w:
@@ -157,12 +151,10 @@ class Reactor:
         within = local - comp_idx * col_w
 
         if within < self.graphite_w:
-            # Graphite column
             if py < self.fuel_top_y or py >= self.fuel_bottom_y:
                 return MATERIAL_GRAPHITE
             return MATERIAL_FUEL
 
-        # Rod channel: rod or water
         mat = self._rod_material_at(px, py)
         return mat if mat else MATERIAL_WATER
 
@@ -178,7 +170,7 @@ class Reactor:
         within = local - comp_idx * col_w
 
         if within < self.graphite_w:
-            return None  # graphite column, no rod here
+            return None
 
         rod_idx = comp_idx
         if rod_idx < 0 or rod_idx >= len(self.rods):
@@ -191,7 +183,6 @@ class Reactor:
             return MATERIAL_BORON
         return None
 
-    # ---- Drawing --------------------------------------------------------
     def draw(self, surf, font_small):
         """Draw the reactor on the given surface.
 
@@ -219,28 +210,24 @@ class Reactor:
         for ci in range(self.num_graphite_cols):
             bx = self.cols_x0 + ci * (self.graphite_w + self.rod_channel_w)
 
-            # Top graphite block
             pygame.draw.rect(
                 surf,
                 ColorPalette.GRAPHITE,
                 (bx, self.core_top_y, self.graphite_w, self.graphite_top_h),
             )
 
-            # Bottom graphite block
             pygame.draw.rect(
                 surf,
                 ColorPalette.GRAPHITE,
                 (bx, self.fuel_bottom_y, self.graphite_w, self.graphite_bottom_h),
             )
 
-            # Fuel zone background
             pygame.draw.rect(
                 surf,
                 ColorPalette.FUEL_BG,
                 (bx, self.fuel_top_y, self.graphite_w, self.fuel_h),
             )
 
-            # Fuel dots
             self._draw_fuel_dots(surf, ci, bx)
 
     def _draw_fuel_dots(self, surf, col_idx, bx):
@@ -259,7 +246,7 @@ class Reactor:
                     color = ColorPalette.U_REACTIVE
                 elif dot_type == "nonreactive":
                     color = ColorPalette.U_NONREACTIVE
-                else:  # xenon
+                else:
                     color = ColorPalette.XENON
 
                 pygame.draw.circle(surf, color, (dx, dy), self.dot_radius)
