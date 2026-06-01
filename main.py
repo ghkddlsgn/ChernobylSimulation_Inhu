@@ -58,7 +58,7 @@ class App:
 
         right_x = self.reactor_panel.rect.right + m
         right_w = WINDOW_WIDTH - right_x - m
-        plots_h = 480
+        plots_h = 515
 
         self.plots_panel = UIPanel(
             pygame.Rect(right_x, m, right_w, plots_h),
@@ -83,7 +83,7 @@ class App:
         ry = self.reactor_panel.rect.y + 45
         rw = self.reactor_panel.rect.w - 20
         rh = self.reactor_panel.rect.h - 55
-        self.reactor = Reactor(rx, ry, rw, rh, num_rods=10)
+        self.reactor = Reactor(rx, ry, rw, rh, num_fuel_cols=11, num_rods=10)
 
     def _setup_controls(self):
         """Build the sliders and buttons inside the Control Panel."""
@@ -184,7 +184,7 @@ class App:
         rect = self.plots_panel.rect
         pad = 14
         graph = pygame.Rect(rect.x + pad, rect.y + 48,
-                            rect.w - 2 * pad, 200)
+                            rect.w - 2 * pad, 185)
         pygame.draw.rect(self.screen, ColorPalette.PLOT_BG, graph)
         pygame.draw.rect(self.screen, ColorPalette.PLOT_GRID, graph, 1)
 
@@ -227,34 +227,41 @@ class App:
             "Supercritical": ColorPalette.STATE_SUPER,
         }.get(state, ColorPalette.MUTED)
 
-        def line(text, color=ColorPalette.TEXT, dy=20, bold=False):
+        def line(text, color=ColorPalette.TEXT, dy=19, bold=False):
             nonlocal y
             font = self.font if not bold else self.font_title
             surf = font.render(text, True, color)
             self.screen.blit(surf, (x, y))
             y += dy
 
+        void_pct = self.reactor.avg_void * 100.0
+        void_color = (ColorPalette.STATE_SUPER if void_pct > 50
+                      else ColorPalette.TEXT)
+
         line(f"k_eff = {k:6.3f}", bold=False)
         sign = "+" if d >= 0 else ""
         line(f"Reactivity = {sign}{d:5.2f} $   (rho/beta)")
         line(f"State: {state}", color=state_color)
+        line(f"Steam void = {void_pct:4.0f} %  (+ feedback)", color=void_color)
         line(f"Fission rate = {self.reactor.fission_rate:5.0f} /s")
         line(f"Neutrons = {len(self.reactor.neutrons)} / {Physics.MAX_NEUTRONS}")
+        line(f"Fuel channels = {self.reactor.num_fuel_cols}, "
+             f"rods = {self.reactor.num_rods}",
+             color=ColorPalette.MUTED)
 
-        y += 8
+        y += 6
         pygame.draw.line(self.screen, ColorPalette.PANEL_BORDER,
                          (x, y), (rect.right - 16, y))
-        y += 10
+        y += 8
         line("Chernobyl reference (qualitative):",
-             color=ColorPalette.MUTED, dy=19)
+             color=ColorPalette.MUTED, dy=18)
         for ref in (
             "beta_eff = 0.0065  (INSAG-7)",
-            "Critical when k_eff = 1.00",
             "Void coef. +(4-5) beta  (INSAG-7)",
             "Rod insertion: +396 pcm w/ Xe,",
             "  -344 pcm normal  (EPJ N 2021)",
         ):
-            line(ref, color=ColorPalette.MUTED, dy=18)
+            line(ref, color=ColorPalette.MUTED, dy=17)
 
     def _draw_controls(self):
         """Draw the sliders, buttons and rod labels in the Control Panel."""

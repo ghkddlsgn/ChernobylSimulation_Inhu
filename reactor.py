@@ -21,8 +21,10 @@ from neutron import Neutron
 class Reactor:
     """The full reactor cross-section.
 
-    Horizontally:  graphite | rod-channel | graphite | rod-channel | ... | graphite
-        (num_rods rod channels, num_rods + 1 graphite columns)
+    Horizontally the core is a row of `num_fuel_cols` fuelled graphite columns
+    separated by thin water (coolant) channels. Only a sparse subset of those
+    channels hold a control rod, mirroring the real RBMK-1000 proportion of
+    roughly 1661 fuel channels to 211 control rods (about 8 : 1).
 
     Vertically, top to bottom:
         top padding (empty, keeps rods off the title bar)
@@ -32,23 +34,30 @@ class Reactor:
         water (bottom)
     """
 
-    def __init__(self, x, y, w, h, num_rods=10):
+    def __init__(self, x, y, w, h, num_fuel_cols=24, num_rods=4):
         """Initialize the reactor geometry.
 
         Args:
             x, y: Top-left corner of the reactor panel.
             w, h: Width and height of the reactor panel.
-            num_rods: Number of control rod channels.
+            num_fuel_cols: Number of fuelled graphite columns.
+            num_rods: Number of control rods (placed in a subset of channels).
         """
         self.x, self.y, self.w, self.h = x, y, w, h
-        self.num_rods = num_rods
-        self.num_graphite_cols = num_rods + 1
+        self.num_fuel_cols = num_fuel_cols
+        self.num_graphite_cols = num_fuel_cols
+        self.num_rods = min(num_rods, num_fuel_cols - 1)
 
         self._setup_vertical_layout()
         self._setup_horizontal_layout()
         self._setup_control_rods()
         self._build_fuel_grid()
         self._init_simulation()
+
+    @property
+    def fuel_to_rod_ratio(self):
+        """Ratio of fuel columns to control rods (for display)."""
+        return self.num_fuel_cols / max(1, self.num_rods)
 
     def _init_simulation(self):
         """Initialize the dynamic neutron-transport state."""
@@ -66,6 +75,13 @@ class Reactor:
         self.reactivity_dollars = 0.0
         self.fission_rate = 0.0
         self._frame_fissions = 0
+
+        # Water/void state: coolant temperature and void fraction inside each
+        # fuel channel (column), heated by that column's recent fission flux.
+        self.col_temp = [0.0] * self.num_fuel_cols
+        self.col_void = [0.0] * self.num_fuel_cols
+        self._col_flux = [0.0] * self.num_fuel_cols
+        self.avg_void = 0.0
 
     def _setup_vertical_layout(self):
         """Configure vertical geometry of the reactor."""
@@ -94,18 +110,34 @@ class Reactor:
         self.rod_channel_w = 16
         side_margin = 25
         usable = self.w - 2 * side_margin
-        used_rod = self.num_rods * self.rod_channel_w
-        self.graphite_w = (usable - used_rod) // self.num_graphite_cols
-        total_w = self.num_graphite_cols * self.graphite_w + used_rod
+        # There is a (thin water) channel between every pair of fuel columns.
+        self.num_channels = self.num_fuel_cols - 1
+        used_channels = self.num_channels * self.rod_channel_w
+        self.graphite_w = (usable - used_channels) // self.num_fuel_cols
+        total_w = self.num_fuel_cols * self.graphite_w + used_channels
         self.cols_x0 = self.x + (self.w - total_w) // 2
         self.body_left = self.cols_x0 - 8
         self.body_right = self.cols_x0 + total_w + 8
 
+    def _rod_channel_indices(self):
+        """Return the channel indices that hold a control rod, evenly spread."""
+        if self.num_rods <= 0:
+            return []
+        if self.num_rods >= self.num_channels:
+            return list(range(self.num_channels))
+        step = self.num_channels / (self.num_rods + 1)
+        idx = sorted({int(round((i + 1) * step)) for i in range(self.num_rods)})
+        return [min(c, self.num_channels - 1) for c in idx]
+
     def _setup_control_rods(self):
-        """Initialize control rods with varied starting positions."""
+        """Initialize control rods in a sparse subset of channels."""
         self.rods = []
-        for i in range(self.num_rods):
-            cx = self.cols_x0 + (i + 1) * self.graphite_w + i * self.rod_channel_w
+        self._rod_by_channel = {}
+        col_w = self.graphite_w + self.rod_channel_w
+        channels = self._rod_channel_indices()
+
+        for ch in channels:
+            cx = self.cols_x0 + (ch + 1) * self.graphite_w + ch * self.rod_channel_w
             rod = ControlRod(
                 channel_x=cx,
                 channel_w=self.rod_channel_w,
@@ -114,16 +146,24 @@ class Reactor:
                 visible_top_y=self.rod_visible_top_y,
             )
             self.rods.append(rod)
+            self._rod_by_channel[ch] = rod
 
-        initial_positions = [0.05, 0.30, 0.50, 0.95, 0.20, 0.55, 0.45, 0.85, 0.60, 0.10]
-        for r, p in zip(self.rods, initial_positions):
-            r.set_normalized_position(p)
+        base = [0.10, 0.45, 0.80, 0.30, 0.60, 0.20, 0.70, 0.50]
+        for i, rod in enumerate(self.rods):
+            rod.set_normalized_position(base[i % len(base)])
+
+    DOT_COLS_PER_CHANNEL = 4
 
     def _build_fuel_grid(self):
         """Generate the fuel dot grid with random distribution."""
         rng = random.Random(42)
         self.fuel = {}
-        n_cols = max(1, (self.graphite_w - 4) // self.dot_spacing)
+
+        # Fit a fixed number of fuel-pin columns across each channel and size
+        # the dots/spacing to match, so the lattice stays readable.
+        n_cols = self.DOT_COLS_PER_CHANNEL
+        self.dot_spacing = max(8, (self.graphite_w - 6) // n_cols)
+        self.dot_radius = max(3, self.dot_spacing // 2 - 1)
         n_rows = max(1, (self.fuel_h - 4) // self.dot_spacing)
         self._n_dot_cols = n_cols
         self._n_dot_rows = n_rows
@@ -135,16 +175,13 @@ class Reactor:
             for r in range(n_rows):
                 for c in range(n_cols):
                     v = rng.random()
-                    if v < 0.22:
+                    if v < Physics.TARGET_REACTIVE_FRAC:
                         t = "reactive"
-                    elif v < 0.98:
+                    elif v < 0.99:
                         t = "nonreactive"
                     else:
                         t = "xenon"
                     self.fuel[(ci, r, c)] = t
-
-    dot_spacing = 9
-    dot_radius = 2
 
     def material_at(self, px, py):
         """Return the material at world coordinates (px, py).
@@ -196,16 +233,30 @@ class Reactor:
         if within < self.graphite_w:
             return None
 
-        rod_idx = comp_idx
-        if rod_idx < 0 or rod_idx >= len(self.rods):
+        rod = self._rod_by_channel.get(comp_idx)
+        if rod is None:
             return None
 
-        section = self.rods[rod_idx].section_at_y(py)
+        section = rod.section_at_y(py)
         if section == "graphite":
             return MATERIAL_GRAPHITE
         if section == "boron":
             return MATERIAL_BORON
         return None
+
+    def _rod_boron_cover(self, ci, py):
+        """Count the boron rods bordering fuel column `ci` that cover height py.
+
+        A fuel column is flanked by the rod channels on its left (ci-1) and
+        right (ci). Each one whose boron absorber currently spans `py` counts
+        as one unit of control-rod worth over this column. Returns 0, 1 or 2.
+        """
+        cover = 0
+        for ch in (ci - 1, ci):
+            rod = self._rod_by_channel.get(ch)
+            if rod is not None and rod.section_at_y(py) == "boron":
+                cover += 1
+        return cover
 
     def fuel_dot_at(self, px, py):
         """Return the nearest fuel dot to world coords, or None.
@@ -262,6 +313,7 @@ class Reactor:
 
         self._spawn_source(dt)
         self._step_neutrons(dt)
+        self._update_coolant(dt)
         self._regen_fuel(dt)
         self._update_diagnostics(dt)
 
@@ -342,8 +394,18 @@ class Reactor:
         key, dtype = found
         cx, cy = self._dot_center(key)
         if (nt.x - cx) ** 2 + (nt.y - cy) ** 2 > self._collision_r2:
-            # Between fuel pins the lattice is graphite moderator, so fast
-            # neutrons thermalize here before they can reach a fissile pin.
+            # Between fuel pins sits graphite moderator and the coolant water.
+            # The coolant absorbs neutrons, but when it boils to steam (void)
+            # that absorption drops -- the positive void feedback. Inserted
+            # boron rods on either side of this column add their own absorption
+            # here, which lets a deep rod override even a fully voided column.
+            ci = key[0]
+            void = self.col_void[ci]
+            absorb = Physics.FUEL_COOLANT_ABSORB_PER_S * (1.0 - void)
+            absorb += Physics.ROD_FUEL_ABSORB_PER_S * self._rod_boron_cover(ci, nt.y)
+            if self.rng_sim.random() < absorb * dt:
+                self._f_losses += 1
+                return True
             if nt.fast and self.rng_sim.random() < Physics.GRAPHITE_MODERATION_PER_S * dt:
                 nt.moderate()
             return False
@@ -365,19 +427,24 @@ class Reactor:
         return False
 
     def _do_fission(self, key, cx, cy, parent_gen, spawned):
-        """Emit fresh fast neutrons; occasionally leave a xenon poison behind.
+        """Emit fresh fast neutrons and consume / poison the struck fuel pin.
 
-        Uranium fuel is abundant, so a fission does not deplete the pin: the
-        blue (reactive) dot persists unless a xenon-135 poison is produced,
-        which later decays away. This keeps the reactive population alive.
+        A fission visibly changes the pin: most often it burns the fissile
+        atom away (blue -> grey, spent U-238-like) and sometimes leaves a
+        xenon-135 poison (blue -> black). _regen_fuel slowly breeds fresh
+        fissile fuel back, so a stable reactive population is maintained.
         """
-        if self.rng_sim.random() < Physics.XENON_YIELD:
+        roll = self.rng_sim.random()
+        if roll < Physics.XENON_YIELD:
             self.fuel[key] = "xenon"
+        elif roll < Physics.XENON_YIELD + Physics.BURNUP_YIELD:
+            self.fuel[key] = "nonreactive"
 
         lo, hi = Physics.NEUTRONS_PER_FISSION
         nu = self.rng_sim.randint(lo, hi)
         self._f_fissions += 1
         self._f_fission_neutrons += nu
+        self._col_flux[key[0]] += 1.0
 
         for _ in range(nu):
             if len(self.neutrons) + len(spawned) >= Physics.MAX_NEUTRONS:
@@ -386,23 +453,67 @@ class Reactor:
                 Neutron(cx, cy, fast=True, generation=parent_gen + 1)
             )
 
-    def _regen_fuel(self, dt):
-        """Decay xenon and slowly breed fresh reactive uranium.
+    def _update_coolant(self, dt):
+        """Heat each channel's coolant from its fissions and update void.
 
-        This is what keeps a blue (reactive) uranium population present over
-        time: spent fuel is gradually replenished and xenon poison decays away,
-        so the chain reaction can be sustained rather than burning out.
+        The coolant water inside a fuel channel is heated by that channel's
+        recent fission flux and cooled toward ambient. Above the boiling point
+        it flashes to steam (void); the void fraction reduces the coolant's
+        neutron absorption in `_interact_fuel`, giving the positive void
+        feedback that drove the Chernobyl excursion.
         """
+        fdecay = math.exp(-dt / Physics.FLUX_TAU_S)
+        flux = self._col_flux
+        heat = Physics.WATER_HEAT_PER_FISSION
+        cool = Physics.WATER_COOL_PER_S
+        boil = Physics.WATER_BOIL_T
+        span = max(1e-6, Physics.WATER_VOID_FULL_T - boil)
+
+        total_void = 0.0
+        for ci in range(self.num_fuel_cols):
+            flux[ci] *= fdecay
+            t = self.col_temp[ci] + heat * flux[ci] * dt - cool * self.col_temp[ci] * dt
+            if t < 0.0:
+                t = 0.0
+            self.col_temp[ci] = t
+            vf = (t - boil) / span
+            vf = 0.0 if vf < 0.0 else (1.0 if vf > 1.0 else vf)
+            self.col_void[ci] = vf
+            total_void += vf
+        self.avg_void = total_void / self.num_fuel_cols if self.num_fuel_cols else 0.0
+
+    def _regen_fuel(self, dt):
+        """Decay xenon and keep the fissile fraction at a stable equilibrium.
+
+        Real low-enriched fuel is mostly non-fissile U-238 with only a small
+        fissile fraction. We hold the reactive (blue) fraction near
+        ``TARGET_REACTIVE_FRAC`` instead of letting it creep toward 100%:
+        below the target we breed nonreactive -> reactive, above it we burn
+        reactive -> nonreactive. Xenon poison always decays away.
+        """
+        items = self.fuel
+        total = len(items)
+        if total == 0:
+            return
+        reactive = 0
+        for t in items.values():
+            if t == "reactive":
+                reactive += 1
+        below = (reactive / total) < Physics.TARGET_REACTIVE_FRAC
+
         p_xe = Physics.XENON_DECAY_PER_S * dt
-        p_re = Physics.FUEL_REGEN_PER_S * dt
+        p_adj = Physics.FUEL_REGEN_PER_S * dt
         rng = self.rng_sim
-        for key, t in self.fuel.items():
+        for key, t in items.items():
             if t == "xenon":
                 if rng.random() < p_xe:
-                    self.fuel[key] = "reactive"
+                    items[key] = "reactive" if below else "nonreactive"
             elif t == "nonreactive":
-                if rng.random() < p_re:
-                    self.fuel[key] = "reactive"
+                if below and rng.random() < p_adj:
+                    items[key] = "reactive"
+            else:  # reactive
+                if not below and rng.random() < p_adj:
+                    items[key] = "nonreactive"
 
     def _update_diagnostics(self, dt):
         """Update the smoothed k_eff and reactivity estimates.
@@ -479,6 +590,18 @@ class Reactor:
         self._draw_control_rods(surf)
         self.draw_neutrons(surf)
 
+    def _coolant_color(self, temp, void):
+        """Blend the fuel-channel background from cool to hot to steam (void)."""
+        t = temp / Physics.WATER_VOID_FULL_T
+        t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+        cool = ColorPalette.FUEL_BG
+        hot = ColorPalette.WATER_HOT
+        col = [cool[i] + (hot[i] - cool[i]) * t for i in range(3)]
+        if void > 0.0:
+            steam = ColorPalette.STEAM
+            col = [col[i] + (steam[i] - col[i]) * void * 0.55 for i in range(3)]
+        return (int(col[0]), int(col[1]), int(col[2]))
+
     def _draw_body(self, surf):
         """Draw the reactor body (water outline)."""
         body_rect = pygame.Rect(
@@ -507,9 +630,10 @@ class Reactor:
                 (bx, self.fuel_bottom_y, self.graphite_w, self.graphite_bottom_h),
             )
 
+            fuel_bg = self._coolant_color(self.col_temp[ci], self.col_void[ci])
             pygame.draw.rect(
                 surf,
-                ColorPalette.FUEL_BG,
+                fuel_bg,
                 (bx, self.fuel_top_y, self.graphite_w, self.fuel_h),
             )
 

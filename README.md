@@ -9,6 +9,22 @@ fission on the blue (reactive) uranium dots producing more fast neutrons, and
 the boron sections of the control rods absorb them. Inserting the control rods
 absorbs neutrons and kills the chain reaction; withdrawing them lets it grow.
 
+The core is laid out as a row of fuelled graphite channels, each cooled by water
+flowing between its fuel pins, separated by thin coolant gaps. A boron control
+rod sits in each gap so it can be driven down into the core to absorb neutrons.
+
+## The Chernobyl mechanism: positive void coefficient
+
+The coolant water inside each fuel channel is heated by that channel's fissions.
+As it warms, the channel is drawn from its cool background toward red (hot), and
+once it boils it becomes steam (void). Steam absorbs far fewer neutrons than
+liquid water, so boiling *raises* reactivity -- which raises power, which boils
+more water: a self-amplifying runaway. This positive void coefficient is exactly
+what made the RBMK unstable at Chernobyl. Withdraw the rods and let power build
+and you will see the fuel channels go red, void, and the neutron population run
+away; insert the rods and the boron holds absorption up, keeping the core cool
+and subcritical.
+
 ## Run
 
 ```bash
@@ -30,6 +46,7 @@ python main.py
 - Blue dot = reactive uranium (fissile), gray = non-fissile, black = xenon poison.
 - Filled dark dot = thermal neutron, hollow ring = fast neutron.
 - Purple = graphite, green = boron absorber band of the control rod.
+- Channels: blue = cool water, red = hot water, pale = steam (void).
 
 ## Physics comparison with Chernobyl data
 
@@ -41,6 +58,8 @@ comparable to a real reactor. Instead the Plots & Diagnostics panel reports
 - **Reactivity** in dollars: `rho = (k_eff - 1) / k_eff`, divided by the
   delayed-neutron fraction `beta_eff = 0.0065`.
 - **Criticality state**: Subcritical / Critical / Supercritical.
+- **Steam void %**: the average coolant void fraction driving the positive
+  feedback.
 
 Reference values shown on screen for comparison of sign and order of magnitude:
 
@@ -53,9 +72,11 @@ Reference values shown on screen for comparison of sign and order of magnitude:
   insertion reactivity `+396 pcm` with xenon poisoning vs `-344 pcm` without.
   https://www.epj-n.org/articles/epjn/full_html/2021/01/epjn200018/epjn200018.html
 
-Note: the headline cause of the accident — the positive *void* (steam)
-coefficient — is out of scope here (no boiling/steam model). The simulation
-focuses on control-rod criticality control and the k_eff / reactivity behaviour.
+The simulation reproduces, qualitatively, the headline cause of the accident:
+the positive *void* (steam) coefficient. Withdrawing the control rods lets power
+build, boils the coolant, and drives a runaway power excursion; inserting them
+restores absorption and shuts the chain down. Absolute magnitudes remain
+illustrative only.
 
 ## Project layout
 

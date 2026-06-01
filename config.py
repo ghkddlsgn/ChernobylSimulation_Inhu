@@ -23,6 +23,8 @@ class ColorPalette:
 
     WATER = (181, 213, 219)
     WATER_OUTLINE = (130, 170, 180)
+    WATER_HOT = (205, 70, 55)
+    STEAM = (228, 222, 226)
     GRAPHITE = (72, 24, 92)
     BORON = (76, 187, 23)
     ROD_CASING = (72, 24, 92)
@@ -76,18 +78,55 @@ class Physics:
 
     GRAPHITE_MODERATION_PER_S = 9.0
     WATER_MODERATION_PER_S = 1.2
-    WATER_ABSORB_PER_S = 2.2
+    WATER_ABSORB_PER_S = 1.7
 
-    THERMAL_FISSION_PROB = 0.85
-    FAST_FISSION_PROB = 0.035
+    # Coolant water *inside* the fuel channel absorbs neutrons between the fuel
+    # pins. This absorption is scaled by (1 - void): when the coolant boils to
+    # steam, the absorption drops and reactivity rises -> the positive void
+    # coefficient. This is the dominant void-feedback term.
+    FUEL_COOLANT_ABSORB_PER_S = 1.9
+
+    # Control-rod worth over the fuel it borders. A boron rod doesn't only
+    # absorb neutrons that wander into its own thin channel: when inserted it
+    # depresses the neutron flux in the adjacent fuel columns too. This term is
+    # applied per bordering rod whose boron section covers the neutron's height,
+    # and is what gives a fully inserted rod the authority to override even a
+    # fully voided column and guarantee shutdown.
+    ROD_FUEL_ABSORB_PER_S = 8.5
+
+    THERMAL_FISSION_PROB = 0.92
+    FAST_FISSION_PROB = 0.05
     NEUTRONS_PER_FISSION = (2, 3)
-    XENON_YIELD = 0.18
+    XENON_YIELD = 0.05
+    # Fraction of fissions that visibly burn the fissile pin away
+    # (reactive -> nonreactive). Makes the chain reaction visible while
+    # _regen_fuel breeds fresh fuel back to hold the equilibrium fraction.
+    BURNUP_YIELD = 0.12
 
-    SOURCE_RATE_PER_S = 6.0
+    SOURCE_RATE_PER_S = 9.0
 
     XENON_DECAY_PER_S = 0.04
-    FUEL_REGEN_PER_S = 0.012
+    FUEL_REGEN_PER_S = 0.15
 
-    MAX_NEUTRONS = 1500
+    # Equilibrium fissile (reactive/blue) fraction of the fuel lattice. Real
+    # low-enriched fuel is mostly non-fissile U-238, so only a fraction of the
+    # dots are reactive. _regen_fuel holds the lattice near this value instead
+    # of letting every dot breed into fissile uranium (which would make each
+    # column wildly over-reactive and able to self-sustain with the rods in).
+    TARGET_REACTIVE_FRAC = 0.28
+
+    # Water / void mechanism -- the source of the POSITIVE void coefficient
+    # that drove the Chernobyl excursion. Fissions heat the coolant water in
+    # each fuel channel; once it boils to steam (void), it absorbs far fewer
+    # neutrons, which raises reactivity and produces more power -> more heat
+    # -> more void: a self-amplifying (positive feedback) runaway, unless the
+    # boron control rods hold absorption up.
+    WATER_HEAT_PER_FISSION = 0.035
+    WATER_COOL_PER_S = 0.5
+    WATER_BOIL_T = 0.45
+    WATER_VOID_FULL_T = 1.3
+    FLUX_TAU_S = 0.5
+
+    MAX_NEUTRONS = 2600
 
     POWER_HISTORY_LEN = 600
