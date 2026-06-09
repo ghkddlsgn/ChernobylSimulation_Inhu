@@ -25,6 +25,7 @@ from config import WINDOW_WIDTH, WINDOW_HEIGHT, FPS, ColorPalette, Physics
 from reactor import Reactor
 from ui_panel import UIPanel, Slider, Button
 from plotter import generate_plots
+from chernobyl_script import EVENTS as CHERNOBYL_EVENTS
 
 
 class App:
@@ -45,6 +46,18 @@ class App:
 
         self._setup_layout()
         self._setup_controls()
+
+        # Chernobyl replay state
+        self.chernobyl_mode    = False
+        self.chernobyl_elapsed = 0.0
+        self.chernobyl_ev_idx  = -1
+        self._cher_title       = ""
+        self._cher_lines       = []
+        self._cher_exploded    = False
+        self._cher_rod_start   = [0.0] * self.reactor.num_rods
+        self._cher_rod_target  = [0.0] * self.reactor.num_rods
+        self._cher_rod_t       = 1.0   # 1.0 = transition complete
+        self._cher_rod_dur     = 4.0   # seconds per rod transition
 
         self.running = True
 
@@ -113,9 +126,13 @@ class App:
         self.save_btn = Button(
             pygame.Rect(cx + 270, btn_y, 125, 28), "Stop & Save", self.font_small
         )
+        self.chernobyl_btn = Button(
+            pygame.Rect(cx, rect.y + 135, inner_w, 28),
+            "⚡ Chernobyl Replay", self.font_small,
+        )
 
         self.rod_sliders = []
-        self._rods_top = rect.y + 168
+        self._rods_top = rect.y + 200
         col_w = inner_w // 2
         for i in range(self.reactor.num_rods):
             col = i // 5
@@ -160,6 +177,8 @@ class App:
                 self.reactor.reset()
             if self.save_btn.handle_event(event):
                 self._stop_and_save()
+            if self.chernobyl_btn.handle_event(event):
+                self._toggle_chernobyl()
 
     def _toggle_pause(self):
         """Toggle the simulation pause state."""
@@ -175,9 +194,70 @@ class App:
         os.makedirs(self._pending_plot_dir, exist_ok=True)
         self.running = False
 
+    def _toggle_chernobyl(self):
+        """Start or cancel the automated Chernobyl replay."""
+        if self.chernobyl_mode:
+            self.chernobyl_mode = False
+            self._cher_exploded = False
+            self.chernobyl_btn.set_label("⚡ Chernobyl Replay")
+        else:
+            self.reactor.reset()
+            self.paused = False
+            self.start_btn.set_label("Pause")
+            self.chernobyl_mode    = True
+            self.chernobyl_elapsed = 0.0
+            self.chernobyl_ev_idx  = -1
+            self._cher_exploded    = False
+            self.chernobyl_btn.set_label("■ Stop Replay")
+            self._apply_chernobyl_event(CHERNOBYL_EVENTS[0])
+
+    def _apply_chernobyl_event(self, ev):
+        """Load an event's description and start a smooth rod transition."""
+        self._cher_title = ev["title"]
+        self._cher_lines = ev["lines"]
+        self._cher_rod_start  = [self.reactor.get_rod_position(i)
+                                  for i in range(self.reactor.num_rods)]
+        self._cher_rod_target = list(ev["rods"])
+        self._cher_rod_t      = 0.0
+        self._cher_rod_dur    = ev.get("duration", 4.0)
+
+    def _advance_chernobyl(self, dt):
+        """Drive rod interpolation and advance through the event script."""
+        self.chernobyl_elapsed += dt
+
+        # Smooth rod interpolation (linear over _cher_rod_dur seconds)
+        if self._cher_rod_t < 1.0:
+            self._cher_rod_t = min(1.0, self._cher_rod_t + dt / self._cher_rod_dur)
+            for i in range(self.reactor.num_rods):
+                pos = (self._cher_rod_start[i]
+                       + (self._cher_rod_target[i] - self._cher_rod_start[i])
+                       * self._cher_rod_t)
+                self.reactor.set_rod(i, pos)
+                self.rod_sliders[i].value = pos
+            avg = sum(self.reactor.get_rod_position(i)
+                      for i in range(self.reactor.num_rods)) / self.reactor.num_rods
+            self.master_slider.value = avg
+
+        # Fire the next event when its timestamp is reached
+        next_idx = self.chernobyl_ev_idx + 1
+        if next_idx < len(CHERNOBYL_EVENTS):
+            if self.chernobyl_elapsed >= CHERNOBYL_EVENTS[next_idx]["time"]:
+                self.chernobyl_ev_idx = next_idx
+                self._apply_chernobyl_event(CHERNOBYL_EVENTS[next_idx])
+                if next_idx == len(CHERNOBYL_EVENTS) - 1:
+                    self._cher_exploded = True
+
+        # Auto-pause 5 s after the final explosion event
+        if self._cher_exploded:
+            explosion_time = CHERNOBYL_EVENTS[-1]["time"]
+            if self.chernobyl_elapsed >= explosion_time + 5.0 and not self.paused:
+                self._toggle_pause()
+
     def _update(self, dt):
         """Advance the simulation if not paused."""
         if not self.paused:
+            if self.chernobyl_mode:
+                self._advance_chernobyl(dt)
             self.reactor.update(dt)
 
     # ------------------------------------------------------------------
@@ -195,6 +275,8 @@ class App:
         self.reactor.draw(self.screen, self.font_small)
         self._draw_plots()
         self._draw_controls()
+        if self.chernobyl_mode:
+            self._draw_chernobyl_overlay()
 
     def _draw_plots(self):
         """Draw the power-history graph and the diagnostic readouts."""
@@ -286,6 +368,7 @@ class App:
         self.start_btn.draw(self.screen)
         self.reset_btn.draw(self.screen)
         self.save_btn.draw(self.screen)
+        self.chernobyl_btn.draw(self.screen)
 
         rect = self.ctrl_panel.rect
         hdr = self.font_small.render("Individual control rods (0=out, 100=in)",
@@ -296,6 +379,28 @@ class App:
             lbl = self.font_small.render(str(i + 1), True, ColorPalette.TEXT)
             self.screen.blit(lbl, (slider.rect.x - 20, slider.rect.y - 3))
             slider.draw(self.screen)
+
+    def _draw_chernobyl_overlay(self):
+        """Draw the semi-transparent event description over the reactor panel."""
+        r = self.reactor_panel.rect
+        PAD, BOX_H = 18, 140
+        box = pygame.Rect(r.x + PAD, r.bottom - BOX_H - PAD,
+                          r.w - 2 * PAD, BOX_H)
+
+        overlay = pygame.Surface((box.w, box.h), pygame.SRCALPHA)
+        bg = (180, 20, 20, 210) if self._cher_exploded else (10, 10, 30, 210)
+        pygame.draw.rect(overlay, bg, overlay.get_rect(), border_radius=6)
+        pygame.draw.rect(overlay, (255, 255, 255, 60),
+                         overlay.get_rect(), 1, border_radius=6)
+        self.screen.blit(overlay, box.topleft)
+
+        title_color = (255, 80, 60) if self._cher_exploded else (255, 220, 100)
+        ts = self.font.render(self._cher_title, True, title_color)
+        self.screen.blit(ts, (box.x + 12, box.y + 10))
+
+        for i, ln in enumerate(self._cher_lines):
+            ls = self.font_small.render(ln, True, (230, 230, 230))
+            self.screen.blit(ls, (box.x + 12, box.y + 34 + i * 22))
 
     def run(self):
         """Main application loop."""
