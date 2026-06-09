@@ -17,11 +17,14 @@ Physics comparison:
     config.Physics.
 """
 
+import os
 import sys
+import datetime
 import pygame
 from config import WINDOW_WIDTH, WINDOW_HEIGHT, FPS, ColorPalette, Physics
 from reactor import Reactor
 from ui_panel import UIPanel, Slider, Button
+from plotter import generate_plots
 
 
 class App:
@@ -107,6 +110,9 @@ class App:
         self.reset_btn = Button(
             pygame.Rect(cx + 145, btn_y, 110, 28), "Reset", self.font_small
         )
+        self.save_btn = Button(
+            pygame.Rect(cx + 270, btn_y, 125, 28), "Stop & Save", self.font_small
+        )
 
         self.rod_sliders = []
         self._rods_top = rect.y + 168
@@ -152,11 +158,22 @@ class App:
                 self._toggle_pause()
             if self.reset_btn.handle_event(event):
                 self.reactor.reset()
+            if self.save_btn.handle_event(event):
+                self._stop_and_save()
 
     def _toggle_pause(self):
         """Toggle the simulation pause state."""
         self.paused = not self.paused
         self.start_btn.set_label("Start" if self.paused else "Pause")
+
+    def _stop_and_save(self):
+        """Pause the simulation, queue plot generation, then close the app."""
+        if not self.paused:
+            self._toggle_pause()
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        self._pending_plot_dir = os.path.join('plots', timestamp)
+        os.makedirs(self._pending_plot_dir, exist_ok=True)
+        self.running = False
 
     def _update(self, dt):
         """Advance the simulation if not paused."""
@@ -268,6 +285,7 @@ class App:
         self.master_slider.draw(self.screen)
         self.start_btn.draw(self.screen)
         self.reset_btn.draw(self.screen)
+        self.save_btn.draw(self.screen)
 
         rect = self.ctrl_panel.rect
         hdr = self.font_small.render("Individual control rods (0=out, 100=in)",
@@ -281,6 +299,7 @@ class App:
 
     def run(self):
         """Main application loop."""
+        self._pending_plot_dir = None
         while self.running:
             dt = self.clock.tick(FPS) / 1000.0
             self._handle_events()
@@ -289,6 +308,16 @@ class App:
             pygame.display.flip()
 
         pygame.quit()
+
+        if self._pending_plot_dir is not None:
+            saved = generate_plots(self.reactor, self._pending_plot_dir)
+            if saved:
+                print(f"[App] {len(saved)} plot(s) saved to: {self._pending_plot_dir}")
+                for p in saved:
+                    print(f"      {p}")
+            else:
+                print("[App] No history data — simulation was never run.")
+
         sys.exit()
 
 

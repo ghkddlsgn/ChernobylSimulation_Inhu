@@ -130,3 +130,5 @@ class Physics:
     MAX_NEUTRONS = 2600
 
     POWER_HISTORY_LEN = 600
+
+    HISTORY_SAMPLE_FRAMES = 6  # sample every ~0.1 s at 60 FPS

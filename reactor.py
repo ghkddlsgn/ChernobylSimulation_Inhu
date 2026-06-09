@@ -83,6 +83,18 @@ class Reactor:
         self._col_flux = [0.0] * self.num_fuel_cols
         self.avg_void = 0.0
 
+        # Session-level history sampled every HISTORY_SAMPLE_FRAMES frames.
+        # Unbounded so the entire run is available for plot generation.
+        self._history_tick = 0
+        self._elapsed_time = 0.0
+        self.history_time         = []
+        self.history_neutrons     = []
+        self.history_k_eff        = []
+        self.history_reactivity   = []
+        self.history_void         = []
+        self.history_fission_rate = []
+        self.history_col_temp     = []
+
     def _setup_vertical_layout(self):
         """Configure vertical geometry of the reactor."""
         self.rod_extension_h = 170
@@ -321,6 +333,18 @@ class Reactor:
         overflow = len(self.power_history) - Physics.POWER_HISTORY_LEN
         if overflow > 0:
             del self.power_history[:overflow]
+
+        self._elapsed_time += dt
+        self._history_tick += 1
+        if self._history_tick >= Physics.HISTORY_SAMPLE_FRAMES:
+            self._history_tick = 0
+            self.history_time.append(self._elapsed_time)
+            self.history_neutrons.append(len(self.neutrons))
+            self.history_k_eff.append(self.k_eff)
+            self.history_reactivity.append(self.reactivity_dollars)
+            self.history_void.append(self.avg_void)
+            self.history_fission_rate.append(self.fission_rate)
+            self.history_col_temp.append(list(self.col_temp))
 
     def _spawn_source(self, dt):
         """Inject spontaneous-fission source neutrons to seed the chain."""
