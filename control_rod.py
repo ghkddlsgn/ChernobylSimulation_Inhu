@@ -55,6 +55,7 @@ class ControlRod:
             p: Normalized position from 0.0 (fully withdrawn) to 1.0 (fully inserted).
         """
         p = max(0.0, min(1.0, p))
+        self.position = p
         y_high = self.body_top_y - 5
         y_low = self.body_bottom_y
         self.tip_y = int(y_high + p * (y_low - y_high))
