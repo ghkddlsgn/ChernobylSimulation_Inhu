@@ -14,44 +14,50 @@ MATERIAL_AIR = "air"
 
 
 class ColorPalette:
-    """Color palette, picked to echo the reactor diagram."""
-    APP_BG = (235, 235, 240)
-    PANEL_BG = (250, 250, 253)
-    PANEL_BORDER = (200, 200, 210)
-    TEXT = (40, 40, 50)
-    MUTED = (140, 140, 150)
+    """Dark control-room palette matching the matplotlib plot theme."""
+    # Chrome — dark navy matching plotter fig_bg / axes_bg
+    APP_BG          = (20,  20,  38 )
+    PANEL_BG        = (22,  33,  62 )
+    PANEL_BORDER    = (42,  42,  74 )
+    TEXT            = (224, 224, 224)
+    MUTED           = (136, 136, 153)
 
-    WATER = (181, 213, 219)
-    WATER_OUTLINE = (130, 170, 180)
-    WATER_HOT = (205, 70, 55)
-    STEAM = (228, 222, 226)
-    GRAPHITE = (72, 24, 92)
-    BORON = (76, 187, 23)
-    ROD_CASING = (72, 24, 92)
+    # Reactor materials
+    WATER           = (40,  85,  115)
+    WATER_OUTLINE   = (55,  115, 145)
+    WATER_HOT       = (210, 70,  55 )
+    STEAM           = (175, 170, 188)
+    GRAPHITE        = (90,  30,  115)
+    BORON           = (80,  200, 30 )
+    ROD_CASING      = (90,  30,  115)
 
-    FUEL_BG = (195, 215, 222)
-    U_REACTIVE = (66, 130, 230)
-    U_NONREACTIVE = (165, 165, 170)
-    XENON = (35, 35, 40)
+    FUEL_BG         = (35,  80,  110)
+    U_REACTIVE      = (80,  155, 255)
+    U_NONREACTIVE   = (110, 110, 120)
+    XENON           = (65,  65,  78 )
 
-    NEUTRON_THERMAL = (30, 30, 35)
-    NEUTRON_FAST = (90, 90, 100)
+    # Neutrons — bright so they read on the dark reactor background
+    NEUTRON_THERMAL = (150, 210, 255)
+    NEUTRON_FAST    = (255, 200, 65 )
 
-    PLOT_BG = (245, 246, 250)
-    PLOT_GRID = (220, 222, 230)
-    PLOT_LINE = (210, 70, 60)
-    PLOT_REF = (150, 150, 160)
+    # Live plot panel
+    PLOT_BG         = (22,  33,  62 )
+    PLOT_GRID       = (42,  42,  74 )
+    PLOT_LINE       = (210, 70,  60 )
+    PLOT_REF        = (102, 102, 119)
 
-    SLIDER_TRACK = (210, 213, 222)
-    SLIDER_FILL = (120, 70, 150)
-    SLIDER_KNOB = (72, 24, 92)
-    BUTTON_BG = (225, 227, 235)
-    BUTTON_BG_HOVER = (210, 213, 225)
-    BUTTON_BORDER = (180, 183, 195)
+    # Controls
+    SLIDER_TRACK    = (42,  42,  74 )
+    SLIDER_FILL     = (74,  140, 212)
+    SLIDER_KNOB     = (210, 70,  60 )
+    BUTTON_BG       = (30,  45,  85 )
+    BUTTON_BG_HOVER = (50,  70,  120)
+    BUTTON_BORDER   = (60,  80,  130)
 
-    STATE_SUB = (70, 140, 220)
-    STATE_CRIT = (40, 160, 90)
-    STATE_SUPER = (210, 70, 60)
+    # Criticality states
+    STATE_SUB       = (70,  140, 220)
+    STATE_CRIT      = (40,  160, 90 )
+    STATE_SUPER     = (210, 70,  60 )
 
 
 class Physics:
